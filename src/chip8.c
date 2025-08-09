@@ -51,17 +51,17 @@ instruction_t * decode_instruction(uint16_t bytes) {
    }
 
    instruction->opcode = bytes;
-   instruction->f = bytes & 0xF000 >> 12;
+   instruction->f = (bytes & 0xF000) >> 12;
    instruction->nnn = bytes & 0x0FFF;
    instruction->nn = bytes & 0x00FF;
    instruction->n = bytes & 0x000F;
-   instruction->x = bytes & 0x0F00 >> 8;
-   instruction->y = bytes & 0x00F0 >> 4;
+   instruction->x = (bytes & 0x0F00) >> 8;
+   instruction->y = (bytes & 0x00F0) >> 4;
    return instruction;
 }
 
 void execute_instruction(instruction_t *instruction) {
-   uint8_t opcode = instruction->opcode;
+   uint16_t opcode = instruction->opcode;
    uint8_t f = instruction->f;
    uint8_t nnn = instruction->nnn;
    uint8_t nn = instruction->nn;
@@ -69,7 +69,7 @@ void execute_instruction(instruction_t *instruction) {
    uint8_t x = instruction->x;
    uint8_t y = instruction->y;
 
-   switch (opcode & 0xF000 >> 12) {
+   switch ((opcode & 0xF000) >> 12) {
       case 0x0:
          break;
       default:
@@ -112,6 +112,6 @@ void chip8_loop(chip8_t *chip8) {
 
    uint16_t pc = chip8->pc;
    uint8_t *memory = chip8->memory;
-   uint16_t b_instruction = ((uint16_t)memory[pc] << 8) | (uint16_t)memory[pc];
+   uint16_t b_instruction = ((uint16_t)memory[pc] << 8) | (uint16_t)memory[pc+1];
    decode_instruction(b_instruction);
 }
