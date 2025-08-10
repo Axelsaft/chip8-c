@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <SDL3/SDL.h>
 
 typedef struct {
    uint8_t memory[4096];
@@ -70,7 +71,23 @@ void execute_instruction(instruction_t *instruction) {
    uint8_t y = instruction->y;
 
    switch ((opcode & 0xF000) >> 12) {
+      // Clear Screen
       case 0x0:
+         break;
+      // Jump
+      case 0x1:
+         break;
+      // set register vx
+      case 0x6:
+         break;
+      // add value to register vx
+      case 0x7:
+         break;
+      // set index register
+      case 0xA:
+         break;
+      // display draw
+      case 0xD:
          break;
       default:
          fprintf(stderr, "execute_instruction | opcode '%dXXX' not recognized!", f); // Don't know how I want to print this...
@@ -113,5 +130,10 @@ void chip8_loop(chip8_t *chip8) {
    uint16_t pc = chip8->pc;
    uint8_t *memory = chip8->memory;
    uint16_t b_instruction = ((uint16_t)memory[pc] << 8) | (uint16_t)memory[pc+1];
-   decode_instruction(b_instruction);
+   instruction_t *i = decode_instruction(b_instruction);
+   if (i == NULL){ 
+      fprintf(stderr, "chip8_loop | Error deconding instruction");
+      return;
+   }
+   execute_instruction(i);
 }
