@@ -1,3 +1,6 @@
-# ignore vscode
+*.o
 .vscode
 .vscode/*
+build
+*.o
+bin
