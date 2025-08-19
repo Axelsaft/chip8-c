@@ -1,13 +1,14 @@
-#include <SDL3/SDL_init.h>
-#include <SDL3/SDL_video.h>
+#include "../include/chip8.h"
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_render.h>
 #include <stdbool.h>
 #include <stdio.h>
 
 const int width = 64;
 const int height = 32;
-const int window_scaling = 10;
+const int window_scaling = 20;
 
-bool init_sdl(SDL_Window **window) {
+bool init_sdl(SDL_Window **window, SDL_Renderer **renderer) {
    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
       return false;
    *window = SDL_CreateWindow("Chip8-Emulator", 
@@ -18,6 +19,27 @@ bool init_sdl(SDL_Window **window) {
       fprintf(stderr, "Failed to create SDL Window");
       return false;
    }
+   *renderer = SDL_CreateRenderer(*window, NULL);
+   if (*renderer == NULL) {
+      fprintf(stderr, "Failed to create SDL Renderer");
+      return false;
+   }
 
+   return true;
+}
+
+bool display_loop(SDL_Window *window, SDL_Renderer *renderer, chip8_t *c, bool *done) {
+   SDL_Event event;
+   while(SDL_PollEvent(&event)) {
+      if (event.type == SDL_EVENT_QUIT)
+         *done = true;
+   }
+   SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+   SDL_RenderClear(renderer);
+   SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+   
+   // rendering here
+   chip8_render_display(renderer, c, window_scaling);
+   SDL_RenderPresent(renderer);
    return true;
 }
