@@ -10,6 +10,7 @@ typedef struct chip8_t{
    uint16_t i; // Index Register, points to memory addresses
    uint16_t pc; // Program Counter, points at the current instruction in memory
    uint16_t stack[32]; // Specs say 16x 16bit values, but I like to have more
+   uint8_t stack_pointer;
    uint8_t v_reg[16]; // Variable Registers, 0-F hex, 0-15, called V0-VF || VF is a flag register
    bool display[32][64]; // Pixel by pixel, value 1 or 0
    uint8_t delay_timer; // Decremented 60 Times a second
@@ -37,7 +38,7 @@ const uint8_t font[] = {
 
 typedef struct instruction_t {
    uint16_t opcode;
-   uint8_t f; // f -> first nibblechi
+   uint8_t f; // f -> first nibble
    uint8_t x;
    uint8_t y;
    uint8_t n;
@@ -61,7 +62,28 @@ instruction_t * decode_instruction(uint16_t bytes) {
    return instruction;
 }
 
-/// Instructions ///
+/*** STACK ***/
+void add_to_stack(chip8_t *c, uint16_t val) {
+   if (c->stack_pointer+1 > 32) {
+      fprintf(stderr, "Stack Overflow!");
+      return;
+   }
+   c->stack[c->stack_pointer] = val;
+   c->stack_pointer++;
+}
+
+uint16_t pop_from_stack(chip8_t *c) {
+   if (c->stack_pointer-1 < 0) {
+      fprintf(stderr, "Stack Underflow! Returning stack[0]...");
+      return c->stack[0];
+   }
+   c->stack_pointer--;
+   return c->stack[c->stack_pointer];
+}
+/*** ***/
+
+/*** OPCODES ***/
+// 00E0
 void clear_screen(chip8_t *c) {
    for (int i = 0; i < 32; i++) {
       for (int j = 0; j < 64; j++) {
@@ -70,17 +92,91 @@ void clear_screen(chip8_t *c) {
    }
 }
 
-
+// 1NNN
 void jump(chip8_t *c, uint16_t location) {
    c->pc = location;
 }
 
+// 2NNN
+void enter_subroutine(chip8_t *c, uint16_t nnn){
+   add_to_stack(c, c->pc);
+   c->pc = nnn;
+}
+
+// 00EE
+void exit_subroutine(chip8_t *c) {
+   c->pc = pop_from_stack(c);
+}
+
+// 3XNN, 4XNN, 5XY0, 9XY0
+void condition(chip8_t *c, instruction_t *i) {
+   switch (i->f) {
+      case 0x3:
+         if (c->v_reg[i->x] == i->nn)
+            c->pc+=2;
+         break;
+      case 0x4:
+         if (c->v_reg[i->x] != i->nn)
+            c->pc+=2;
+         break;
+      case 0x5:
+         if (c->v_reg[i->x] == c->v_reg[i->y])
+            c->pc+=2;
+         break;
+      case 0x9:
+         if (c->v_reg[i->x] != c->v_reg[i->y])
+            c->pc+=2;
+         break;
+   }
+}
+
+// 6XNN
 void set_register(chip8_t *c, uint8_t reg, uint8_t value) {
    c->v_reg[reg] = value;
 }
 
+// 7XNN
 void add_val_to_register(chip8_t *c, uint8_t reg, uint8_t value) {
    c->v_reg[reg] += value;
+}
+
+//8XY0
+void set_vx_vy(chip8_t *c, uint8_t x, uint8_t y) {
+   c->v_reg[x] = c->v_reg[y];
+}
+
+void logical_arithmetic_instruction(chip8_t *c, instruction_t *i) {
+   switch(i->n) {
+      case 0x0:
+         c->v_reg[i->x] = c->v_reg[i->y];
+         break;
+      case 0x1:
+         c->v_reg[i->x] = c->v_reg[i->x] | c->v_reg[i->y];
+         break;
+      case 0x2:
+         c->v_reg[i->x] = c->v_reg[i->x] & c->v_reg[i->y];
+         break;
+      case 0x3:
+         c->v_reg[i->x] = c->v_reg[i->x] ^ c->v_reg[i->y];
+         break;
+      case 0x4:
+         c->v_reg[i->x] = c->v_reg[i->x] + c->v_reg[i->y];
+         break;
+      case 0x5:
+         c->v_reg[i->x] = c->v_reg[i->x] - c->v_reg[i->y];
+         break;
+      case 0x6:
+         //c->v_reg[i->x] = c->v_reg[i->y]; not wanted in modern chip8
+         uint8_t bit = c->v_reg[i->x] & 0x1;
+         c->v_reg[i->x] = c->v_reg[i->x] >> 1;
+         c->v_reg[0xF] = bit;
+         break;
+      case 0x7:
+         c->v_reg[i->x] = c->v_reg[i->y] - c->v_reg[i->x];
+         break;
+      case 0xE:
+         break;
+   }
 }
 
 void set_index_register(chip8_t *c, uint16_t value) {
