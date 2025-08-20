@@ -1,5 +1,6 @@
 #include <SDL3/SDL_rect.h>
 #include <stdint.h>
+#include <time.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -146,6 +147,7 @@ void set_vx_vy(chip8_t *c, uint8_t x, uint8_t y) {
 }
 
 void logical_arithmetic_instruction(chip8_t *c, instruction_t *i) {
+   uint8_t bit;
    switch(i->n) {
       case 0x0:
          c->v_reg[i->x] = c->v_reg[i->y];
@@ -167,7 +169,7 @@ void logical_arithmetic_instruction(chip8_t *c, instruction_t *i) {
          break;
       case 0x6:
          //c->v_reg[i->x] = c->v_reg[i->y]; not wanted in modern chip8
-         uint8_t bit = c->v_reg[i->x] & 0x1;
+         bit = c->v_reg[i->x] & 0x1;
          c->v_reg[i->x] = c->v_reg[i->x] >> 1;
          c->v_reg[0xF] = bit;
          break;
@@ -175,14 +177,31 @@ void logical_arithmetic_instruction(chip8_t *c, instruction_t *i) {
          c->v_reg[i->x] = c->v_reg[i->y] - c->v_reg[i->x];
          break;
       case 0xE:
+         bit = c->v_reg[i->x] & 0x80;
+         c->v_reg[i->x] = c->v_reg[i->x] << 1;
+         c->v_reg[0xF] = bit;
          break;
    }
 }
 
+// ANNN
 void set_index_register(chip8_t *c, uint16_t value) {
    c->i = value;
 }
 
+// BNNN
+void jump_with_offset(chip8_t *c, instruction_t *i) {
+   c->pc = i->nnn + c->v_reg[0];
+}
+
+// CXNN
+void random_number(chip8_t *c, instruction_t *i) {
+   srand(time(NULL));
+   uint8_t rand_num = rand() % UINT8_MAX;
+   c->v_reg[i->x] = rand_num & i->nn;
+}
+
+// DXYN
 void display_draw(chip8_t *c, uint8_t x, uint8_t y, uint8_t n) {
    printf("Called display_draw\n");
    c->v_reg[15] = 0; //VF = 16 -> [15]
@@ -208,6 +227,29 @@ void display_draw(chip8_t *c, uint8_t x, uint8_t y, uint8_t n) {
          }
       }
    }
+}
+
+// EX9E & EXA1 Skip if key pressed
+// todo
+
+// FX07 FX15 FX18
+void handle_timers(chip8_t *c, instruction_t *i) {
+   switch (i->nn){
+      case 0x07:
+         c->v_reg[i->x] = c->delay_timer;
+         break;
+      case 0x15:
+         c->delay_timer = c->v_reg[i->x];
+         break;
+      case 0x18:
+         c->sound_timer = c->v_reg[i->x];
+         break;
+   }
+} 
+
+// FX1E:
+void add_to_index(chip8_t *c, instruction_t *i){
+   c->i += c->v_reg[i->x];
 }
 
 bool execute_instruction(chip8_t *c, instruction_t *instruction) {
