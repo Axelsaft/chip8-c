@@ -14,7 +14,9 @@ int main(int argc, char *argv[])
       return -1;
 
    chip8_t *c;
-   chip8_init(&c, "../ibm.ch8");
+	chip8_init(&c, "../corax.ch8");
+	//chip8_init(&c, "../ibm.ch8");
+   //chip8_init(&c, "../test_opcode.ch8");
    if (!c) {
       fprintf(stderr, "Failed to create chip8_t struct!");
       return -1;

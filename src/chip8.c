@@ -44,7 +44,7 @@ typedef struct instruction_t {
    uint8_t y;
    uint8_t n;
    uint8_t nn;
-   uint8_t nnn;
+   uint16_t nnn;
 } instruction_t;
 
 instruction_t * decode_instruction(uint16_t bytes) {
@@ -54,7 +54,8 @@ instruction_t * decode_instruction(uint16_t bytes) {
       return NULL;
    }
 
-   instruction->opcode = bytes; instruction->f = (bytes & 0xF000) >> 12;
+   instruction->opcode = bytes; 
+	instruction->f = (bytes & 0xF000) >> 12;
    instruction->nnn = bytes & 0x0FFF;
    instruction->nn = bytes & 0x00FF;
    instruction->n = bytes & 0x000F;
@@ -75,7 +76,7 @@ void add_to_stack(chip8_t *c, uint16_t val) {
 
 uint16_t pop_from_stack(chip8_t *c) {
    if (c->stack_pointer-1 < 0) {
-      fprintf(stderr, "Stack Underflow! Returning stack[0]...");
+      fprintf(stderr, "Stack Underflow! Returning stack[0]...\n");
       return c->stack[0];
    }
    c->stack_pointer--;
@@ -203,7 +204,6 @@ void random_number(chip8_t *c, instruction_t *i) {
 
 // DXYN
 void display_draw(chip8_t *c, uint8_t x, uint8_t y, uint8_t n) {
-   printf("Called display_draw\n");
    c->v_reg[15] = 0; //VF = 16 -> [15]
    if (x > 63 || y > 31) {
       fprintf(stderr, "Failed to draw screen! X or Y too high! x: %d, y: %d", x,y);
@@ -252,6 +252,42 @@ void add_to_index(chip8_t *c, instruction_t *i){
    c->i += c->v_reg[i->x];
 }
 
+// FX0A todo get key
+
+// FX29 
+void font_character(chip8_t *c, instruction_t *i) {
+	uint16_t addr = c->v_reg[i->x]*5;
+	c->i = addr;
+}
+
+//FX33
+void decimal_conversion(chip8_t *c, instruction_t *i) {
+	uint8_t first, second, third;
+	first = c->v_reg[i->x] / 100;
+	second = (c->v_reg[i->x] / 10) % 10;
+	third = c->v_reg[i->x] % 10;
+	c->memory[c->i] = first;
+	c->memory[c->i+1] = second;
+	c->memory[c->i+2] = third;
+}
+
+// FX55 FX65
+void store_load_memory(chip8_t *c, instruction_t *i) {
+	switch (i->nn) {
+		case 0x55:
+			for (int j = 0; j < i->x+1; j++) {
+				c->memory[c->i+j] = c->v_reg[j];
+			}
+			break;
+		case 0x65:
+			for (int j = 0; j < i->x+1; j++) {
+				uint8_t value = c->memory[c->i+j];
+				c->v_reg[j] = value;
+			}
+			break;
+	}
+}
+
 bool execute_instruction(chip8_t *c, instruction_t *instruction) {
    bool hasJumped = false;
 
@@ -266,37 +302,72 @@ bool execute_instruction(chip8_t *c, instruction_t *instruction) {
    switch ((opcode & 0xF000) >> 12) {
       // Clear Screen
       case 0x0:
-         if (x == 0x0 && y == 0xE){
-         printf("Calling clear_screen\n");
+         if (x == 0x0 && y == 0xE && instruction->nn != 0xEE){
          clear_screen(c);
-         }
+         } else if (instruction->nn==0xEE) {
+				exit_subroutine(c);
+			}
          break;
       // Jump
       case 0x1:
-         //printf("Calling jump\n");
-         jump(c, (opcode&0x0FFF)); // 0x0NNN
+         jump(c, instruction->nnn); // 0x0NNN
          hasJumped = true;
          break;
+		case 0x2:
+			enter_subroutine(c, instruction->nnn);
+			hasJumped = true;
+			break;
+		case 0x3:
+			condition(c, instruction);
+			break;
+		case 0x4:
+			condition(c, instruction);
+			break;
+		case 0x5:
+			condition(c, instruction);
+			break;
       // set register vx
       case 0x6:
-         printf("Calling set_register\n");
          set_register(c, (opcode&0x0F00)>>8, (opcode&0x00FF));
          break;
       // add value to register vx
       case 0x7:
-         printf("Calling add_val_to_register\n");
          add_val_to_register(c, (opcode&0x0F00)>>8, (opcode&0x00FF));
          break;
+		case 0x8:
+			logical_arithmetic_instruction(c, instruction);
+			break;
+		case 0x9:
+			condition(c, instruction);
+			break;
       // set index register
       case 0xA:
-         printf("Calling set_index_register\n");
          set_index_register(c, (opcode&0x0FFF));
          break;
+		case 0xB:
+			jump_with_offset(c, instruction);
+			break;
+		case 0xC:
+			random_number(c, instruction);
+			break;
       // display draw
       case 0xD:
-         printf("Calling display_draw\n");
          display_draw(c, instruction->x, instruction->y, instruction->n);
          break;
+		//case 0xE: TODO: Skip if key
+		case 0xF:
+			if (instruction->nn == 0x07 || instruction->nn == 0x15 || instruction->nn == 0x18 )
+				handle_timers(c, instruction);
+			if (instruction->nn == 0x1E)
+				add_to_index(c, instruction);
+			//if (instruction->nn == 0x0A) TODO: GET KEY
+			if (instruction->nn == 0x29)
+				font_character(c, instruction);
+			if (instruction->nn == 0x33)
+				decimal_conversion(c, instruction);
+			if (instruction->nn == 0x55 || instruction->nn == 0x65)
+				store_load_memory(c, instruction);
+			break;
       default:
          fprintf(stderr, "execute_instruction | opcode '%dXXX' not recognized!\n", f); // Don't know how I want to print this...
    }
@@ -351,6 +422,7 @@ void chip8_loop(chip8_t *chip8) {
       fprintf(stderr, "chip8_loop | Error deconding instruction\n");
       return;
    }
+	//printf("Decoded nnn: %X, nn: %X, n: %X, opcode: %X\n", i->nnn, i->nn, i->n, i->opcode);
    bool canIncrement = execute_instruction(chip8, i);
    if (canIncrement)
       chip8->pc += 2;
