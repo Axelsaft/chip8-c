@@ -1,4 +1,5 @@
 #include <SDL3/SDL_rect.h>
+#include <SDL3/SDL_scancode.h>
 #include <stdint.h>
 #include <time.h>
 #include <stdbool.h>
@@ -16,6 +17,7 @@ typedef struct chip8_t{
    bool display[32][64]; // Pixel by pixel, value 1 or 0
    uint8_t delay_timer; // Decremented 60 Times a second
    uint8_t sound_timer; // Like delay_timer, beeps if not 0
+	uint8_t keypad[16];
 } chip8_t;
 
 const uint8_t font[] = {
@@ -36,6 +38,38 @@ const uint8_t font[] = {
    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
+
+/*** Keypad ***/
+
+int keymap(SDL_Scancode scancode) {
+	switch (scancode) {
+		case SDL_SCANCODE_1: return 0x1;
+		case SDL_SCANCODE_2: return 0x2;
+		case SDL_SCANCODE_3: return 0x3;
+		case SDL_SCANCODE_Q: return 0x4;
+		case SDL_SCANCODE_W: return 0x5;
+		case SDL_SCANCODE_E: return 0x6;
+		case SDL_SCANCODE_A: return 0x7;
+		case SDL_SCANCODE_S: return 0x8;
+		case SDL_SCANCODE_D: return 0x9;
+		case SDL_SCANCODE_X: return 0x0;
+		case SDL_SCANCODE_Y: return 0xA;
+		case SDL_SCANCODE_C: return 0xB;
+		case SDL_SCANCODE_4: return 0xC;
+		case SDL_SCANCODE_R: return 0xD;
+		case SDL_SCANCODE_F: return 0xE;
+		case SDL_SCANCODE_V: return 0xF;
+		default:
+			return -1;
+	}
+}
+
+void chip8_set_key(chip8_t *c, int key, uint8_t set) {
+	c->keypad[key] = set;
+	printf("Set key %x to %d\n", key, set);
+}
+
+/*** ***/
 
 typedef struct instruction_t {
    uint16_t opcode;
@@ -346,6 +380,7 @@ bool execute_instruction(chip8_t *c, instruction_t *instruction) {
          break;
 		case 0xB:
 			jump_with_offset(c, instruction);
+			hasJumped = true;
 			break;
 		case 0xC:
 			random_number(c, instruction);
@@ -438,3 +473,14 @@ void chip8_render_display(SDL_Renderer *renderer, chip8_t *c, int scale) {
       }
    }
 }; 
+
+void chip8_decrease_timers(chip8_t *c) {
+	if (c->delay_timer > 0)
+		c->delay_timer--;
+	if (c->sound_timer > 0)
+		c->sound_timer--;
+	
+	if (c->sound_timer > 0) {
+		// TODO: BEEP!
+	}
+}

@@ -1,7 +1,10 @@
 #include "../include/chip8.h"
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_oldnames.h>
 #include <SDL3/SDL_render.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 
 const int width = 64;
@@ -33,6 +36,16 @@ bool display_loop(SDL_Window *window, SDL_Renderer *renderer, chip8_t *c, bool *
    while(SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT)
          *done = true;
+
+		if (event.type == SDL_EVENT_KEY_UP || event.type == SDL_EVENT_KEY_DOWN) {
+			int key = keymap(event.key.scancode);
+			if (key != -1) {
+				uint8_t set = 0;
+				if (event.type == SDL_EVENT_KEY_DOWN)
+					set = 1;
+				chip8_set_key(c, key, set);
+			}
+		}
    }
    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
    SDL_RenderClear(renderer);
