@@ -1,5 +1,10 @@
+#include <SDL3/SDL_audio.h>
+#include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_oldnames.h>
 #include <SDL3/SDL_rect.h>
+#include <SDL3/SDL_render.h>
 #include <SDL3/SDL_scancode.h>
+#include <SDL3/SDL_stdinc.h>
 #include <stdint.h>
 #include <time.h>
 #include <stdbool.h>
@@ -18,6 +23,9 @@ typedef struct chip8_t{
    uint8_t delay_timer; // Decremented 60 Times a second
    uint8_t sound_timer; // Like delay_timer, beeps if not 0
 	uint8_t keypad[16];
+	SDL_AudioStream *as;
+	uint8_t *beep_data;
+	uint32_t beep_len;
 } chip8_t;
 
 const uint8_t font[] = {
@@ -265,6 +273,21 @@ void display_draw(chip8_t *c, uint8_t x, uint8_t y, uint8_t n) {
 
 // EX9E & EXA1 Skip if key pressed
 // todo
+void skip_if_key(chip8_t *c, instruction_t *i) {
+	uint8_t key = c->v_reg[i->x];
+	if (key <= 16) {
+		switch (i->nn){
+			case (0x9E):
+				if (c->keypad[key] == 1)
+					c->pc+=2;
+				break;
+			case (0xA1):
+				if (c->keypad[key] != 1)
+					c->pc+=2;
+				break;
+		}
+	}
+}
 
 // FX07 FX15 FX18
 void handle_timers(chip8_t *c, instruction_t *i) {
@@ -287,6 +310,17 @@ void add_to_index(chip8_t *c, instruction_t *i){
 }
 
 // FX0A todo get key
+bool get_key(chip8_t *c, instruction_t *i) {
+	for (int j = 0; j < 16; j++) {
+		uint8_t keypress = c->keypad[j];
+		if (keypress == 1) {
+			c->v_reg[i->x] = j;
+			printf("Key was pressed!");
+			return false;
+		}
+	}
+	return true;
+}
 
 // FX29 
 void font_character(chip8_t *c, instruction_t *i) {
@@ -332,6 +366,8 @@ bool execute_instruction(chip8_t *c, instruction_t *instruction) {
    uint8_t n = instruction->n;
    uint8_t x = instruction->x;
    uint8_t y = instruction->y;
+
+	//printf("PC: %03X | Opcode: %04X\n", c->pc, ((c->memory[c->pc] << 8) | c->memory[c->pc+1]));
 
    switch ((opcode & 0xF000) >> 12) {
       // Clear Screen
@@ -389,13 +425,16 @@ bool execute_instruction(chip8_t *c, instruction_t *instruction) {
       case 0xD:
          display_draw(c, instruction->x, instruction->y, instruction->n);
          break;
-		//case 0xE: TODO: Skip if key
+		case 0xE:
+			skip_if_key(c, instruction);
+			break;
 		case 0xF:
 			if (instruction->nn == 0x07 || instruction->nn == 0x15 || instruction->nn == 0x18 )
 				handle_timers(c, instruction);
 			if (instruction->nn == 0x1E)
 				add_to_index(c, instruction);
-			//if (instruction->nn == 0x0A) TODO: GET KEY
+			if (instruction->nn == 0x0A){
+				hasJumped = get_key(c, instruction);}
 			if (instruction->nn == 0x29)
 				font_character(c, instruction);
 			if (instruction->nn == 0x33)
@@ -440,6 +479,27 @@ int chip8_init(chip8_t **c, char * rom_path) {
    }
    fclose(f);
 
+	printf("Opening Audio Stream...");
+	SDL_AudioSpec spec;
+	char *wav_path;
+	uint8_t *wav_data = NULL;
+	uint32_t wav_len = 0;
+	SDL_asprintf(&wav_path, "../sounds/beep.wav"); 
+	if (!SDL_LoadWAV(wav_path, &spec, &wav_data, &wav_len)) {
+		fprintf(stderr, "Failed to load beep.wav!");
+		return 0;
+	}
+	SDL_free(wav_path);
+	(*c)->beep_data = wav_data;
+	(*c)->beep_len = wav_len;
+
+	(*c)->as = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
+	if (!(*c)->as) {
+		fprintf(stderr, "Failed to create Audio Stream!");
+		return 0;
+	}
+	SDL_ResumeAudioStreamDevice((*c)->as);
+
    return 1;
 }
 
@@ -467,9 +527,12 @@ void chip8_render_display(SDL_Renderer *renderer, chip8_t *c, int scale) {
    for (int y = 0; y < 32; y++) {
       for (int x = 0; x < 64; x++) {
          if (c->display[y][x] == true) {
-            SDL_FRect r = {x * scale, y*scale, scale, scale};
-            SDL_RenderFillRect(renderer, &r);
-         }
+				SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+         } else {
+				SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+			}
+			SDL_FRect r = {x * scale, y*scale, scale, scale};
+			SDL_RenderFillRect(renderer, &r);
       }
    }
 }; 
@@ -481,6 +544,7 @@ void chip8_decrease_timers(chip8_t *c) {
 		c->sound_timer--;
 	
 	if (c->sound_timer > 0) {
-		// TODO: BEEP!
+		SDL_PutAudioStreamData(c->as, c->beep_data, c->beep_len);
+		SDL_FlushAudioStream(c->as);
 	}
 }
